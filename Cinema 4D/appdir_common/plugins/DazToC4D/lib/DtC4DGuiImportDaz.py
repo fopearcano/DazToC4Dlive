@@ -29,6 +29,7 @@ class GuiImportDaz(gui.GeDialog):
     BUTTON_CONFIG = 923127
     BUTTON_HELP = 923129
     BUTTON_AUTO_IK = 923130
+    BUTTON_UPDATE_CHARACTER = 923132
     SLIDER_BUMP_MULTIPLIER = 17550
     SLIDER_NORMAL_MULTIPLIER = 17551
     SLIDER_SSS_MULTIPLIER = 17552
@@ -193,6 +194,13 @@ class GuiImportDaz(gui.GeDialog):
             self.buttonBC("", "Preset0"),
         )
         self.auto_import_prop_but.SetImage(self.img_btnAutoImport_PROP, True)
+
+        # Add Update Character button
+        self.AddButton(
+            self.BUTTON_UPDATE_CHARACTER,
+            c4d.BFH_CENTER,
+            name="Update Character"
+        )
 
         self.GroupEnd()  # END ///////////////////////////////////////////////
         self.AddSeparatorV(0, c4d.BFV_SCALEFIT)  # Separator V
@@ -409,5 +417,31 @@ class GuiImportDaz(gui.GeDialog):
             new = 2  # open in a new tab, if possible
             url = "http://www.daz3d.com"
             webbrowser.open(url, new=new)
+
+        if id == self.BUTTON_UPDATE_CHARACTER:
+            self.buttonsChangeState(False)
+            var = Variables()
+            var.restore_variables()
+
+            if not var.skeleton:
+                gui.MessageDialog(
+                    "No character found in scene.\nPlease import a character first using Auto Import.",
+                    c4d.GEMB_OK,
+                )
+            else:
+                # Update the character pose from DTU
+                result = Poses().update_live_pose(var.skeleton, var.dtu)
+                if result:
+                    gui.MessageDialog(
+                        "Character pose updated successfully!",
+                        c4d.GEMB_OK,
+                    )
+                else:
+                    gui.MessageDialog(
+                        "Failed to update character pose.\nPlease check that the DTU file has been updated in Daz Studio.",
+                        c4d.GEMB_OK,
+                    )
+
+            self.buttonsChangeState(True)
 
         return True

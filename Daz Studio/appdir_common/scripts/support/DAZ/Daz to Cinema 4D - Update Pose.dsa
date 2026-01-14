@@ -1,0 +1,16 @@
+// DAZ Studio version 4.12.0.86 filetype DAZ Script
+// Update Pose for Live Export to Cinema 4D
+
+(function(){
+	// Set the mode flag
+	UPDATE_POSE_MODE = true;
+
+	// Include the main script
+	var s_oFileInfo = new DzFileInfo( getScriptFileName() );
+	var s_sScriptPath = s_oFileInfo.path();
+	var sMainScript = s_sScriptPath + "/Daz to Cinema 4D.dsa";
+	s_oFileInfo.deleteLater();
+
+	// Execute the main script in update pose mode
+	include( sMainScript );
+})();
