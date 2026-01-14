@@ -2583,6 +2583,112 @@
 	};
 	
 	/*********************************************************************/
-	main();
+	// void : Update pose data only for live export
+	function updatePoseOnly( oFigure, sDtuFilename )
+	{
+		// Read existing DTU file
+		var oDtuFile = new DzFile( sDtuFilename );
+		if( !oDtuFile.exists() ){
+			MessageBox.critical(
+				qsTr( "DTU file does not exist: %1\n\nPlease perform a full export first." ).arg( sDtuFilename ),
+				s_sToolName, qsTr( "&OK" )
+			);
+			return false;
+		}
+
+		// Parse existing DTU JSON
+		oDtuFile.open( DzFile.ReadOnly );
+		var sJsonText = oDtuFile.read();
+		oDtuFile.close();
+
+		var oDtuJson = JSON.parse( sJsonText );
+
+		// Capture current pose
+		s_oPoseData = {};
+		loadPoseData( oFigure, true );
+
+		// Update pose data in DTU JSON
+		oDtuJson["PoseData"] = s_oPoseData;
+
+		// Add timestamp for live update tracking
+		var oDate = new Date();
+		oDtuJson["LiveUpdateTimestamp"] = oDate.toISOString();
+
+		// Write updated DTU file
+		oDtuFile.open( DzFile.WriteOnly );
+		oDtuFile.write( JSON.stringify( oDtuJson, null, 4 ) );
+		oDtuFile.close();
+
+		return true;
+	};
+
+	/*********************************************************************/
+	// void : Main function for live pose update
+	function mainUpdatePose()
+	{
+		buildRootLists();
+
+		if( s_aFigures.length == 0 ){
+			MessageBox.information(
+				qsTr( "No figures selected.\n\nPlease select a figure to update." ),
+				s_sToolName, qsTr( "&OK" )
+			);
+			return;
+		}
+
+		if( s_aFigures.length > 1 ){
+			MessageBox.information(
+				qsTr( "Multiple figures selected.\n\nPlease select only one figure to update." ),
+				s_sToolName, qsTr( "&OK" )
+			);
+			return;
+		}
+
+		var oFigure = s_aFigures[0];
+
+		// Ask user to select which export to update
+		var nFigureIndex = MessageBox.question(
+			qsTr( "Enter the figure export number (0, 1, 2, etc.) to update:\n\nThis corresponds to the FIG folder number from your last export." ),
+			s_sToolName, qsTr( "&0" ), qsTr( "&1" ), qsTr( "&2" ), qsTr( "&Cancel" )
+		);
+
+		if( nFigureIndex == 3 ){
+			return;
+		}
+
+		// Construct DTU file path
+		var sFileBasename = String( "%1%2/%2%3/%2" )
+			.arg( s_sRootPath )
+			.arg( s_sFig )
+			.arg( nFigureIndex );
+		var sDtuFilename = sFileBasename + ".dtu";
+
+		// Update pose data
+		if( updatePoseOnly( oFigure, sDtuFilename ) ){
+			MessageBox.information(
+				qsTr( "Pose updated successfully!\n\nSwitch to Cinema 4D and click 'Update Character' to see the changes." ),
+				s_sToolName, qsTr( "&OK" )
+			);
+		}
+	};
+
+	/*********************************************************************/
+	// Check if we should run update pose or regular export
+	// This allows the script to be called with different parameters
+	var bUpdatePoseMode = false;
+	try {
+		// Check if UPDATE_POSE_MODE is defined (can be set externally)
+		if( typeof UPDATE_POSE_MODE !== 'undefined' && UPDATE_POSE_MODE ){
+			bUpdatePoseMode = true;
+		}
+	} catch( e ){
+		// Variable not defined, use regular mode
+	}
+
+	if( bUpdatePoseMode ){
+		mainUpdatePose();
+	} else {
+		main();
+	}
 
 })();

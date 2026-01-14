@@ -1,4 +1,6 @@
 import math
+import os
+import json
 
 from c4d import documents, gui
 import c4d
@@ -6,6 +8,7 @@ import c4d
 from .DazToC4DClasses import DazToC4D
 from .CustomIterators import ObjectIterator
 from .AllSceneToZero import AllSceneToZero
+from .DtuLoader import DtuLoader
 
 """
 Switched Daz Characters to a TPose
@@ -202,6 +205,86 @@ class Poses:
                 joint.SetMg(matrix)
 
             c4d.EventAdd()
+
+    def update_live_pose(self, skeleton, dtu_path):
+        """
+        Update character pose from DTU file without re-importing the mesh.
+        This enables live export workflow from Daz Studio.
+
+        Args:
+            skeleton: The skeleton root object in C4D
+            dtu_path: Path to the DTU file
+
+        Returns:
+            bool: True if update successful, False otherwise
+        """
+        try:
+            # Check if DTU file exists
+            if not os.path.exists(dtu_path):
+                print(f"DazToC4D: DTU file not found: {dtu_path}")
+                return False
+
+            # Reload DTU file directly
+            with open(dtu_path, 'r') as f:
+                dtu_dict = json.load(f)
+
+            if not dtu_dict:
+                print("DazToC4D: Failed to load DTU file")
+                return False
+
+            # Check for live update timestamp
+            if "LiveUpdateTimestamp" in dtu_dict:
+                timestamp = dtu_dict["LiveUpdateTimestamp"]
+                print(f"DazToC4D: Applying live update from {timestamp}")
+
+            # Store new pose data directly from dict
+            if "PoseData" in dtu_dict:
+                self.pose_data = dtu_dict["PoseData"]
+            else:
+                print("DazToC4D: No PoseData found in DTU file")
+                return False
+
+            # Get all joints from skeleton
+            doc = documents.GetActiveDocument()
+            joints = []
+
+            def collect_joints(obj):
+                joints.append(obj)
+                child = obj.GetDown()
+                while child:
+                    collect_joints(child)
+                    child = child.GetNext()
+
+            # Start from hip joint
+            hip = doc.SearchObject("hip")
+            if hip:
+                # Add skeleton root
+                if skeleton:
+                    joints.append(skeleton)
+                collect_joints(hip)
+            else:
+                print("DazToC4D: Hip joint not found")
+                return False
+
+            # Apply the new pose
+            self.restore_pose(joints)
+
+            # Update viewport
+            c4d.EventAdd()
+            c4d.DrawViews(
+                c4d.DRAWFLAGS_ONLY_ACTIVE_VIEW
+                | c4d.DRAWFLAGS_NO_THREAD
+                | c4d.DRAWFLAGS_STATICBREAK
+            )
+
+            print("DazToC4D: Character pose updated successfully!")
+            return True
+
+        except Exception as e:
+            print(f"DazToC4D: Error updating live pose: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def preAutoIK(self):
         doc = documents.GetActiveDocument()
