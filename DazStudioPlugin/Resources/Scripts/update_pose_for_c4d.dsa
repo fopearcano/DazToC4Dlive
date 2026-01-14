@@ -1,0 +1,160 @@
+// DAZ Studio Script: Update Pose for Live Export to Cinema 4D
+// This script updates only the pose data in an existing DTU file
+// without re-exporting the entire character.
+//
+// Instructions:
+// 1. Perform a full export first using File -> Send To -> Daz To Cinema 4D
+// 2. Import the character in Cinema 4D using the DazToC4D plugin
+// 3. Adjust your character's pose in Daz Studio
+// 4. Run this script (Scripts -> Update Pose for C4D)
+// 5. In Cinema 4D, click "Update Character" button in the DazToC4D panel
+
+(function(){
+	var s_sToolName = "Update Pose for Cinema 4D";
+
+	// Get the export root path
+	var s_sRootPath = App.getDocumentsPath() + "/DAZ 3D/Bridges/Daz To Cinema 4D/Exports/";
+
+	// Helper function to get selected figure
+	function getSelectedFigure()
+	{
+		var oNode = Scene.getPrimarySelection();
+		if( !oNode || !oNode.inherits("DzSkeleton") ){
+			MessageBox.information(
+				qsTr( "Please select a figure (character) to update." ),
+				s_sToolName, qsTr( "&OK" )
+			);
+			return null;
+		}
+		return oNode;
+	}
+
+	// Load pose data from figure
+	function loadPoseData( oFigure )
+	{
+		var oPoseData = {};
+		var aNodes = [];
+
+		// Get all nodes in the figure
+		var aTopNodes = oFigure.getNodeChildren( false );
+		for( var i = 0; i < aTopNodes.length; i += 1 ){
+			var oTopNode = aTopNodes[i];
+			if( oTopNode.name == "hip" ){
+				aNodes = aNodes.concat( oFigure, oTopNode, oTopNode.getNodeChildren( true ) );
+				break;
+			}
+		}
+
+		// Collect pose data for each node
+		for( var i = 0; i < aNodes.length; i += 1 ){
+			var oNode = aNodes[i];
+			var sName = oNode.name;
+			var sLabel = oNode.getLabel();
+			var vecPos = oNode.getLocalPos();
+			var mtxScale = oNode.getLocalScale();
+
+			// Determine object type
+			var sObjectType = "EMPTY";
+			if( oNode.getObject() ){
+				if( oNode.getObject().getCurrentShape() &&
+					oNode.getObject().getCurrentShape().getGeometry() &&
+					oNode.getObject().getCurrentShape().getGeometry().getNumFacets() > 0 ){
+					sObjectType = "MESH";
+				}
+			}
+			if( oNode.inherits("DzBone") ){
+				sObjectType = "BONE";
+			}
+
+			oPoseData[sName] = {
+				"Name": sName,
+				"Label": sLabel,
+				"Object Type": sObjectType,
+				"Object": (sObjectType == "MESH" ? oNode.getObject().name : "EMPTY"),
+				"Position": [vecPos.x, vecPos.y, vecPos.z],
+				"Rotation": [
+					oNode.getXRotControl().getLocalValue(),
+					oNode.getYRotControl().getLocalValue(),
+					oNode.getZRotControl().getLocalValue()
+				],
+				"Scale": [mtxScale.m11, mtxScale.m22, mtxScale.m33]
+			};
+		}
+
+		return oPoseData;
+	}
+
+	// Update DTU file with new pose data
+	function updateDtuPose( sDtuPath, oPoseData )
+	{
+		// Read existing DTU file
+		var oDtuFile = new DzFile( sDtuPath );
+		if( !oDtuFile.exists() ){
+			MessageBox.critical(
+				qsTr( "DTU file not found:\n%1\n\nPlease perform a full export first." ).arg( sDtuPath ),
+				s_sToolName, qsTr( "&OK" )
+			);
+			return false;
+		}
+
+		oDtuFile.open( DzFile.ReadOnly );
+		var sJsonText = oDtuFile.read();
+		oDtuFile.close();
+
+		// Parse JSON
+		var oDtuJson = JSON.parse( sJsonText );
+
+		// Update pose data
+		oDtuJson["PoseData"] = oPoseData;
+
+		// Add timestamp
+		var oDate = new Date();
+		oDtuJson["LiveUpdateTimestamp"] = oDate.toISOString();
+
+		// Write updated DTU file
+		oDtuFile.open( DzFile.WriteOnly );
+		oDtuFile.write( JSON.stringify( oDtuJson, null, 4 ) );
+		oDtuFile.close();
+
+		return true;
+	}
+
+	// Main function
+	function main()
+	{
+		// Get selected figure
+		var oFigure = getSelectedFigure();
+		if( !oFigure ) return;
+
+		// Ask user for figure export number
+		var nFigNum = MessageBox.question(
+			qsTr( "Which figure export number do you want to update?\n\n" +
+				 "This corresponds to the FIG folder number from your last export.\n\n" +
+				 "Figure: %1" ).arg( oFigure.getLabel() ),
+			s_sToolName, qsTr( "&FIG0" ), qsTr( "&FIG1" ), qsTr( "&FIG2" ), qsTr( "&Cancel" )
+		);
+
+		if( nFigNum == 3 ) return; // Cancel
+
+		// Construct DTU file path
+		var sDtuPath = String( "%1FIG%2/FIG%2/FIG%2.dtu" )
+			.arg( s_sRootPath )
+			.arg( nFigNum );
+
+		// Load current pose
+		var oPoseData = loadPoseData( oFigure );
+
+		// Update DTU file
+		if( updateDtuPose( sDtuPath, oPoseData ) ){
+			MessageBox.information(
+				qsTr( "Pose updated successfully!\n\n" +
+					 "Switch to Cinema 4D and click 'Update Character' to see the changes." ),
+				s_sToolName, qsTr( "&OK" )
+			);
+		}
+	}
+
+	// Run main
+	main();
+
+})();

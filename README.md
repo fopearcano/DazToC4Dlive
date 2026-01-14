@@ -7,6 +7,19 @@ props to Cinema 4D.
 * Offical Release: [Daz to Cinema 4D Bridge][ProductURL]
 * Official Project: [github.com/daz3d/DazToC4D][RepositoryURL]
 
+## 🆕 Live Character Export Feature
+
+This fork includes a **Live Character Export** feature that allows you to update character poses in Daz Studio and see the changes in Cinema 4D without re-importing the entire character. Perfect for iterative pose refinement with Octane rendering!
+
+**Quick Start:**
+1. Export your character normally from Daz to C4D
+2. Adjust the pose in Daz Studio
+3. Run the "Update Pose" script (`DazStudioPlugin/Resources/Scripts/update_pose_for_c4d.dsa`)
+4. Click "Update Character" in Cinema 4D's DazToC4D panel
+5. Your pose updates instantly!
+
+📖 **Full documentation**: See [LIVE_EXPORT_GUIDE.md](LIVE_EXPORT_GUIDE.md)
+
 
 ## Table of Contents
 1. About the Bridge

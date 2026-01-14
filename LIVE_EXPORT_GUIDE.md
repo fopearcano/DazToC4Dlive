@@ -4,6 +4,27 @@
 
 The Live Character Export feature allows you to update character poses in Daz Studio and see the changes reflected in Cinema 4D **without re-importing the entire character**. This is perfect for iterative pose refinement when rendering in Octane or other Cinema 4D renderers.
 
+## Installation
+
+### Daz Studio Side
+
+The update pose script is included in the DazStudioPlugin Resources folder. To make it easily accessible:
+
+1. Navigate to: `DazStudioPlugin/Resources/Scripts/update_pose_for_c4d.dsa`
+2. **Option A**: Add to Scripts Menu
+   - In Daz Studio, go to **Scripts → IDE**
+   - Load the script: `update_pose_for_c4d.dsa`
+   - Right-click the script tab and select **Add to Scripts Menu**
+
+3. **Option B**: Create a Custom Action
+   - Go to **Edit → Customize**
+   - Create a new custom action that runs the script
+   - Assign a keyboard shortcut for quick access
+
+### Cinema 4D Side
+
+The "Update Character" button is built into the DazToC4D plugin panel. No additional installation needed.
+
 ## How It Works
 
 The live export workflow consists of two main operations:
@@ -22,8 +43,8 @@ The live export workflow consists of two main operations:
 
 ### Step 2: Import Character in Cinema 4D
 
-1. In **Cinema 4D**, open the DazToC4D plugin panel
-2. Click **"Auto Import Figure"** button
+1. In **Cinema 4D**, open the DazToC4D plugin panel (from Daz 3D menu)
+2. Click **"GENESIS CHARACTERS"** button (the Auto Import Figure button)
 3. The character will be imported with mesh, skeleton, materials, and the initial pose
 4. Keep Cinema 4D open for live updates
 
@@ -36,10 +57,11 @@ The live export workflow consists of two main operations:
    - Modify any other pose parameters
 
 2. Once you're happy with the new pose, run the **Update Pose** script:
-   - **File → Scripts → Daz to Cinema 4D - Update Pose**
-   - Or manually run: `Daz Studio/appdir_common/scripts/support/DAZ/Daz to Cinema 4D - Update Pose.dsa`
+   - **Scripts → Update Pose for C4D** (if you've added it to your Scripts menu)
+   - Or manually run: **Scripts → IDE → Load** and navigate to:
+     `DazStudioPlugin/Resources/Scripts/update_pose_for_c4d.dsa`
 
-3. Select the figure export number when prompted (usually 0 for the first character)
+3. Select the figure export number when prompted (usually FIG0 for the first character)
 
 4. Wait for the confirmation message: "Pose updated successfully!"
 
@@ -89,10 +111,10 @@ The live export uses the DTU (Daz Transfer Utility) JSON file format:
 - **Updated Section**: `PoseData` - Contains position, rotation, and scale for each bone
 - **New Field**: `LiveUpdateTimestamp` - ISO timestamp of the last pose update
 
-### Daz Studio Scripts
+### Daz Studio Plugin
 
-1. **Daz to Cinema 4D.dsa** - Main export script (full export)
-2. **Daz to Cinema 4D - Update Pose.dsa** - Pose-only update script (live export)
+1. **DzC4DAction** - Main C++ plugin for full exports (File → Send To → Daz to Cinema 4D)
+2. **update_pose_for_c4d.dsa** - DAZ Script for pose-only updates (in `DazStudioPlugin/Resources/Scripts/`)
 
 ### Cinema 4D Plugin
 
@@ -132,6 +154,29 @@ The live export uses the DTU (Daz Transfer Utility) JSON file format:
 - Animation frames are not supported (planned)
 - Requires both programs to remain open during iteration
 
+## Architecture Notes
+
+This live export feature has been ported to work with the modern C++ plugin architecture:
+
+- **Cinema 4D Side**: Python plugin (`DtC4DGuiImportDaz.py`, `DtC4DPosing.py`)
+  - `update_live_pose()` method reads updated DTU files and applies pose changes
+  - Works seamlessly with both old and new export formats
+
+- **Daz Studio Side**: Hybrid approach
+  - Main exports use the C++ DzC4DAction plugin
+  - Pose updates use a DAZ Script (`update_pose_for_c4d.dsa`) for simplicity
+  - This avoids requiring C++ compilation for the pose update feature
+
+### Why a Script for Pose Updates?
+
+Using a DAZ Script for pose updates provides several advantages:
+- **No compilation needed** - Users can modify the script if needed
+- **Lightweight** - Fast execution for simple pose data updates
+- **Easy to debug** - Can view and edit the script logic
+- **Cross-platform** - Works on Windows and macOS without platform-specific builds
+
+The full export still benefits from the C++ plugin's speed and integration with the DzBridge library.
+
 ## Future Enhancements
 
 - Support for morph/expression updates
@@ -139,6 +184,7 @@ The live export uses the DTU (Daz Transfer Utility) JSON file format:
 - Animation timeline support
 - Auto-refresh option (watch for file changes)
 - Undo/redo support for pose updates
+- Integration of pose update as a C++ action in the main plugin (optional)
 
 ## Tips
 
