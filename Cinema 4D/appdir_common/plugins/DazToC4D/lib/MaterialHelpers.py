@@ -18,15 +18,22 @@ def srgb_to_linear_rgb(srgb):
 def hex_to_col(hex, normalize=True, precision=6):
     col = []
     it = iter(str(hex))
-    if c4d.GetC4DVersion() <= 22123:
+    # if c4d.GetC4DVersion() <= 22123:
+    if True:
         for index, char in enumerate(it):
-            col.append(int(char + next(it), 16))
+            if index % 2 == 0:
+                hex_pair = str(char)
+            else:
+                hex_pair += str(char)
+                col.append(int(hex_pair, 16))
     else:
         for char in it:
             col.append(int(char + it.__next__(), 16))
     if normalize:
-        col = map(lambda x: x / 255, col)
-        col = map(lambda x: round(x, precision), col)
+        float_col = map(lambda x: float(x) / 255.0, col)
+        rounded_float_col = map(lambda x: round(x, precision), float_col)
+        col = rounded_float_col
+    # print("DEBUG: hex_to_col(): hex: " + str(hex) + ", it: " + str(list(enumerate(str(hex)))) + ", col: " + str(col))
     return list(c for c in col)
 
 
@@ -41,6 +48,9 @@ def convert_to_vector(value):
     num *= value
     return c4d.Vector(num, num, num)
 
+def convert_color_temperature(temp):
+    color_rgb = c4d.modules.colorchooser.ColorKelvinTemperatureToRGB(temp)
+    return color_rgb
 
 class MaterialHelpers:
     material_dict = {}
@@ -83,12 +93,26 @@ class MaterialHelpers:
         self.normal_value = normal_value
         self.bump_value = bump_value
 
-    def is_trans(self, prop):
+    # NOTES: is_trans is actually is_refraction_enabled
+    def is_trans(self, prop, mat=None):
         lib = texture_library
         for prop_name in lib["transparency"]["Name"]:
             if prop_name in prop.keys():
                 if prop[prop_name]["Value"] > 0:
+                    # DB 2024-Nov-18, Bugfix: do not enable if there is a cutout opacity texture
+                    for opacity_prop_name in lib["opacity"]["Name"]:
+                        if opacity_prop_name in prop.keys():
+                            if prop[opacity_prop_name]["Texture"] != "":
+                                # DB 2024-11-20: Disable transparency (Iray Refraction-based) if there is a cutout opacity texture
+                                # ... unless material is Tear or Moisture
+                                if mat and (
+                                    "tear" in mat.GetName().lower() or 
+                                    "moisture" in mat.GetName().lower()
+                                    ):
+                                    return True
+                                return False
                     return True
+        return False
 
     def is_diffuse(self, prop):
         lib = texture_library
@@ -96,13 +120,20 @@ class MaterialHelpers:
             if prop_name in prop.keys():
                 if prop[prop_name]["Texture"] != "":
                     return True
+        return False
 
     def is_metal(self, prop):
         lib = texture_library
+        # DB 2023-June-20, Bugfix: Metallicity Enable
+        for prop_name in lib["metalness-enable"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Value"] != 1:
+                    return False
         for prop_name in lib["metalness"]["Name"]:
             if prop_name in prop.keys():
                 if prop[prop_name]["Value"] > 0:
                     return True
+        return False
 
     def is_sss(self, prop):
         lib = texture_library
@@ -110,6 +141,56 @@ class MaterialHelpers:
             if prop_name in prop.keys():
                 if prop[prop_name]["Value"] > 0:
                     return True
+        return False
+
+    def is_makeup_base(self, prop):
+        lib = texture_library
+        for prop_name in lib["makeup-base"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Value"] != "":
+                    return True
+                if prop[prop_name]["Texture"] != "":
+                    return True
+        return False
+                
+    def is_makeup_weight(self, prop):
+        lib = texture_library
+        for prop_name in lib["makeup-weight"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Value"] > 0:
+                    return True
+                if prop[prop_name]["Texture"] != "":
+                    return True
+        return False
+
+    def is_emission(self, prop):
+        lib = texture_library
+        has_emission = False
+        has_luminance = False
+        for prop_name in lib["emission-color"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Value"] != "":
+                    emission_color_string = prop[prop_name]["Value"]
+                    emission_color = convert_color(emission_color_string)
+                    if emission_color == [0, 0, 0]:
+                        has_emission = False
+                    else:
+                        has_emission = True
+        for prop_name in lib["luminance"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Value"] > 0:
+                    has_luminance = True
+        if has_emission and has_luminance:
+            return True
+        return False
+
+    def is_alpha(self, prop):
+        lib = texture_library
+        for prop_name in lib["opacity"]["Name"]:
+            if prop_name in prop.keys():
+                if prop[prop_name]["Texture"] != "":
+                    return True
+        return False
 
     def check_value(self, type, value):
         if type == "float":

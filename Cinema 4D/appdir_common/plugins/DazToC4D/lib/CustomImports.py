@@ -1,6 +1,7 @@
 import c4d
 import os
 import sys
+import traceback
 from c4d import documents, gui
 
 from .CustomCmd import Cinema4DCommands as dzc4d
@@ -48,8 +49,17 @@ class CustomImports:
             for imported_dir in import_list:
                 dtu = DtuLoader.DtuLoader(imported_dir)
                 fbx_path = dtu.get_fbx_path()
-                self.genesis_import(fbx_path, dtu, sss_value, normal_value, bump_value)
-
+                try:
+                    self.genesis_import(fbx_path, dtu, sss_value, normal_value, bump_value)
+                except Exception as e:
+                    gui.MessageDialog(
+                        "Import Failed.\n" + 
+                        "\nException: " + str(e) + "\n\n" +
+                        "You can check the console for more info (Shift + F10)",
+                        c4d.GEMB_OK,
+                    )
+                    print("Import Failed with Exception: " + str(e))
+                    traceback.print_exc()
         os.chdir(current_dir)
 
     def auto_import_prop(self, sss_value, normal_value, bump_value):
@@ -60,7 +70,17 @@ class CustomImports:
             for imported_dir in import_list:
                 dtu = DtuLoader.DtuLoader(imported_dir)
                 fbx_path = dtu.get_fbx_path()
-                self.prop_import(fbx_path, dtu, sss_value, normal_value, bump_value)
+                try:
+                    self.prop_import(fbx_path, dtu, sss_value, normal_value, bump_value)
+                except Exception as e:
+                    gui.MessageDialog(
+                        "Import Failed.\n" + 
+                        "\nException: " + str(e) + "\n\n" +
+                        "You can check the console for more info (Shift + F10)",
+                        c4d.GEMB_OK,
+                    )
+                    print("Import Failed with Exception: " + str(e))
+                    traceback.print_exc()
         os.chdir(current_dir)
 
     def genesis_import(self, file_path, dtu, sss_value, normal_value, bump_value):
@@ -97,16 +117,8 @@ class CustomImports:
         dzc4d.del_unused_mats()
         c4d.EventAdd()
 
-        var.store_dtu(dtu)
-        if var.prepare_variables():
-            gui.MessageDialog(
-                "Import Failed.\nYou can check the console for more info (Shift + F10)",
-                c4d.GEMB_OK,
-            )
-            print("Import Failed")
-            return
-        print("Import Done")
-
+        # DB 2023-Aug-08: Materials moved to be processed before joint/skeleton corrections
+        #  Note: this code does not rely on var.store_dtu()
         print("Starting Material Updates")
 
         c4d.EventAdd()
@@ -120,49 +132,74 @@ class CustomImports:
         dzc4d.del_unused_mats()
         mat.store_materials(dtu)
         mat.store_sliders(sss_value, normal_value, bump_value)
-        mat.update_materials()
+        mat.safe_update_materials()
 
-        print("Material Conversion Done")
+        print("Material Updates Done")
         c4d.EventAdd()
 
-        wgt.store_subdivision(dtu)
-        if wgt.check_level():
-            auto_weight = c4d.gui.QuestionDialog(
-                "Subdivisions have been detected\nthis is currently not fully supported.\nWould you like to autoweight the mesh?"
+        # DB 2023-Aug-08: Joint and Skeleton Corrections moved to after Materials
+        #  Also removed some dependencies for Genesis skeleton so that non-humanoid skeletons can also be partially corrected
+        var.store_dtu(dtu)
+        if var.prepare_variables():
+            gui.MessageDialog(
+                "Import Failed.\nYou can check the console for more info (Shift + F10)",
+                c4d.GEMB_OK,
             )
-            if auto_weight:
-                wgt.auto_calculate_weights(var.body)
+            print("Import Failed")
+            return
+        print("Import Done")
+
+        ## DB 2022-June-03: subdivision correction is now done in Daz Studio plugin,
+        ##   the following code block no longer needed.
+        # wgt.store_subdivision(dtu)
+        # if wgt.check_level():
+        #     auto_weight = c4d.gui.QuestionDialog(
+        #         "Subdivisions have been detected\nthis is currently not fully supported.\nWould you like to autoweight the mesh?"
+        #     )
+        #     if auto_weight:
+        #         wgt.auto_calculate_weights(var.body)
 
         pose.store_pose(dtu)
         pose.store_offset(dtu)
         is_posed = pose.checkIfPosed()
         is_anim = anim.check_animation_exists(var.c_joints)
-        clear_pose = False
-        if is_posed:
-            clear_pose = gui.QuestionDialog(
-                "Importing Posed Figure is currently not fully supported\nWould you like to try to fix bone orientation?",
-            )
-            if clear_pose:
+        fix_bone_rotations = False
+        override_pose = False
+        ## DB 2022-Aug-31: disabled code below because the clear_pose() function is not fully working, leading to even greater problems
+        ## when fix_joints() is called because fix_joints clears and resets the bind pose, assuming the character is already correctly
+        ## posed in the bind pose position.
+        # if is_anim == False and is_posed:
+        #     override_pose = gui.QuestionDialog(
+        #         "Importing Posed Figure is currently not fully supported\nWould you like to try to fix bone orientation?",
+        #     )
+        #     if override_pose:
+        #         pose.clear_pose(var.c_joints)
+        #         pose.fix_offset(var.c_joints, var.c_skin_data)
+
+        ### DB 2023-July-10: pose.clear_pose() may be fixed now (problem was probably in DTU generation?) so we are trying to use it
+        if (is_anim == False) or override_pose:
+            fix_bone_rotations = gui.QuestionDialog(
+                "Would you like to fix bone orientations?",
+                )
+            if fix_bone_rotations:
                 pose.clear_pose(var.c_joints)
                 pose.fix_offset(var.c_joints, var.c_skin_data)
-
-        if is_anim == False or clear_pose:
-            jnt_fixes.store_joint_orientations(dtu)
-            jnt_fixes.fix_joints(var.c_skin_data, var.c_joints, var.c_meshes)
-            c4d.EventAdd()
-            dzc4d.deselect_all()
-            if is_posed:
-                pose.restore_pose(var.c_joints)
-            make_tpose = gui.QuestionDialog(
-                "Would you like to Convert\nthe Base Pose to a T-Pose?",
-            )
-            if make_tpose:
-                pose.preAutoIK()
+                jnt_fixes.store_joint_orientations(dtu)
+                jnt_fixes.fix_joints(var.c_skin_data, var.c_joints, var.c_meshes)
                 c4d.EventAdd()
+                dzc4d.deselect_all()
+                pose.restore_pose(var.c_joints)
+                make_tpose = gui.QuestionDialog(
+                    "Would you like to Convert\nthe Base Pose to a T-Pose?",
+                )
+                if make_tpose:
+                    pose.clear_pose(var.c_joints)
+                    pose.preAutoIK()
+                    c4d.EventAdd()
 
         else:
             gui.MessageDialog(
-                "Animation or a Pose was Detected\nJoint Orientation has not been fixed",
+                "Animation was Detected\nJoint Orientation has not been fixed",
                 type=c4d.GEMB_ICONEXCLAMATION,
             )
         c4d.EventAdd()
@@ -208,6 +245,7 @@ class CustomImports:
             return 0
         print("Import FBX from : {0}".format(os.path.dirname(file_path)))
         self.import_daz_fbx(file_path)
+
         c4d.DrawViews(
             c4d.DRAWFLAGS_ONLY_ACTIVE_VIEW
             | c4d.DRAWFLAGS_NO_THREAD
@@ -236,10 +274,15 @@ class CustomImports:
         dzc4d.del_unused_mats()
         mat.store_materials(dtu)
         mat.store_sliders(sss_value, normal_value, bump_value)
-        mat.update_materials()
+        mat.safe_update_materials()
 
-        print("Material Conversion Done")
+        print("Material Updates Done")
         c4d.EventAdd()
+
+        # DB 2024-11-22: support DTU-based material conversion
+        var = Utilities.Variables()
+        var.store_dtu(dtu)
+        var.store_to_scene()
 
         c4d.DrawViews(
             c4d.DRAWFLAGS_ONLY_ACTIVE_VIEW
@@ -278,7 +321,9 @@ class CustomImports:
         import_list = []
         if os.path.exists(os.path.join(EXPORT_DIR, "FIG")):
             for i in os.listdir(os.path.join(EXPORT_DIR, "FIG")):
-                import_list.append(os.path.join(EXPORT_DIR, "FIG", i))
+                subpath = os.path.join(EXPORT_DIR, "FIG", i)
+                if os.path.isdir(subpath):
+                    import_list.append(subpath)
             return import_list
         else:
             gui.MessageDialog(
@@ -293,7 +338,9 @@ class CustomImports:
         import_list = []
         if os.path.exists(os.path.join(EXPORT_DIR, "ENV")):
             for i in os.listdir(os.path.join(EXPORT_DIR, "ENV")):
-                import_list.append(os.path.join(EXPORT_DIR, "ENV", i))
+                subpath = os.path.join(EXPORT_DIR, "ENV", i)
+                if os.path.isdir(subpath):
+                    import_list.append(subpath)
             return import_list
         else:
             gui.MessageDialog(

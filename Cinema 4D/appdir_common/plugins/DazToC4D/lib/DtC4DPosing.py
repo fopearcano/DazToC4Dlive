@@ -9,6 +9,7 @@ from .DazToC4DClasses import DazToC4D
 from .CustomIterators import ObjectIterator
 from .AllSceneToZero import AllSceneToZero
 from .DtuLoader import DtuLoader
+from .Utilities import is_genesis9
 
 """
 Switched Daz Characters to a TPose
@@ -32,6 +33,45 @@ ToDo: Refactor the T Pose to Have some type of Standard we can follow.
 class autoAlignArms:
     def __init__(self):
         doc = documents.GetActiveDocument()
+
+        if is_genesis9():
+            #print("DEBUG: autoAlignArms() Genesis 9 detected")
+            self.alignJoint("l", "_upperarm", "_forearm")
+            #self.alignJoint("l", "_upperarmtwist1", "_forearm")
+            #self.alignJoint("l", "_upperarmtwist2", "_forearm")
+            #self.alignJoint("l", "_forearm", "_hand")
+            self.alignJoint("l", "_forearm", "_forearmtwist1")
+            self.alignJoint("l", "_forearm", "_forearmtwist2")
+            #self.alignJoint("l", "_forearmtwist1", "_hand")
+            #self.alignJoint("l", "_forearmtwist2", "_hand")
+
+            # self.alignJoint("l", "_index1", "_index2")
+            # self.alignJoint("l", "_index2", "_index3")
+            # self.alignJoint("l", "_mid1", "_mid2")
+            # self.alignJoint("l", "_mid2", "_mid3")
+            # self.alignJoint("l", "_ring1", "_ring2")
+            # self.alignJoint("l", "_ring2", "_ring3")
+            # self.alignJoint("l", "_pinky1", "_pinky2")
+            # self.alignJoint("l", "_pinky2", "_pinky3")
+
+            self.alignJoint("r", "_upperarm", "_forearm")
+            #self.alignJoint("r", "_upperarmtwist1", "_forearm")
+            #self.alignJoint("r", "_upperarmtwist2", "_forearm")
+            #self.alignJoint("r", "_forearm", "_hand")
+            self.alignJoint("r", "_forearm", "_forearmtwist1")
+            self.alignJoint("r", "_forearm", "_forearmtwist2")
+            #self.alignJoint("r", "_forearmtwist1", "_hand")
+            #self.alignJoint("r", "_forearmtwist2", "_hand")
+
+            # self.alignJoint("r", "_index1", "_index2")
+            # self.alignJoint("r", "_index2", "_index3")
+            # self.alignJoint("r", "_mid1", "_mid2")
+            # self.alignJoint("r", "_mid2", "_mid3")
+            # self.alignJoint("r", "_ring1", "_ring2")
+            # self.alignJoint("r", "_ring2", "_ring3")
+            # self.alignJoint("r", "_pinky1", "_pinky2")
+            # self.alignJoint("r", "_pinky2", "_pinky3")
+
         obj = doc.SearchObject("lShldrTwist")
         if obj:
             self.alignJoint("l", "ShldrBend", "ForearmBend")
@@ -155,6 +195,7 @@ class Poses:
         c4d.EventAdd()
 
     def clear_pose(self, joints):
+        print("DEBUG: clear_pose() called")
         for joint in joints:
             jnt_data = self.get_pose_data(joint)
             if jnt_data:
@@ -170,6 +211,7 @@ class Poses:
                 joint.SetMg(matrix)
 
     def fix_offset(self, joints, c_skin_data):
+        print("DEBUG: fix_offset() called")
         self.disable_skin_data(c_skin_data)
         for joint in joints:
             jnt_data = self.get_pose_data(joint)
@@ -291,12 +333,17 @@ class Poses:
         obj = doc.SearchObject("hip")
         if obj:
             doc = documents.GetActiveDocument()
-            if not doc.SearchObject("lThighTwist"):
-                if self.checkIfPosedResetPose(False) == False:
-                    forceTpose().dazFix_All_To_T_Pose()
-            if doc.SearchObject("lThighTwist"):
+            if is_genesis9():
+                # print("DEBUG: preAutoIK(): is_genesis9() detected")
+                self.dazManualRotationFixTpose()
+            elif doc.SearchObject("lThighTwist"):
+                # print("DEBUG: preAutoIK(): lThighTwist detected")
                 if self.checkIfPosedResetPose(False) == False:
                     self.dazManualRotationFixTpose()
+            elif doc.SearchObject("lThighTwist") is None:
+                # print("DEBUG: preAutoIK(): lThighTwist not detected")
+                if self.checkIfPosedResetPose(False) == False:
+                    forceTpose().dazFix_All_To_T_Pose()
 
         c4d.DrawViews(
             c4d.DRAWFLAGS_ONLY_ACTIVE_VIEW
@@ -306,7 +353,15 @@ class Poses:
         c4d.EventAdd()
 
     def checkIfPosedResetPose(self, checkAndReset=True):
+        # print("DEBUG: checkIfPosedResetPose() called")
+        ### DB 2023-July-10: *** WARNING! this function is defined multiple places ****
+        ### TODO: Rewrite this entire function because it is hardcoded with many flawed assumptions
         def checkIfPosed():
+            # print("DEBUG: checkIfPosedResetPose.checkIfPosed() called")
+            # Until updated, hardcode to always return True if G9
+            if is_genesis9():
+                return True
+
             obj = doc.GetFirstObject()
             scene = ObjectIterator(obj)
             jointsList = [
@@ -427,7 +482,14 @@ class Poses:
         else:
             return True
 
+    ### DB 2023-July-10: *** WARNING! this function is defined multiple places ****
+    ### TODO: Rewrite this entire function because it is hardcoded with many flawed assumptions
     def checkIfPosed(self):
+        # print("DEBUG: checkIfPosed() called")
+        # Until updated, hardcode to always return True if G9
+        if is_genesis9():
+            return True
+        
         doc = documents.GetActiveDocument()
 
         obj = doc.GetFirstObject()
@@ -523,6 +585,9 @@ class Poses:
                     else:
                         return "Genesis8"
 
+        if is_genesis9():
+            return "Genesis9"
+
     def dazManualRotationFixTpose(self):
         # return False #Quit TEMPORAL
         doc = documents.GetActiveDocument()
@@ -537,6 +602,10 @@ class Poses:
                 joint[c4d.ID_BASEOBJECT_REL_ROTATION, c4d.VECTOR_Z] = z
 
         dazType = self.find_genesis()
+
+        if dazType == "Genesis9":
+            #print("DEBUG: dazManualRotationFixTpose() Genesis 9 detected")
+            autoAlignArms()
 
         if dazType == "Genesis8":
             autoAlignArms()

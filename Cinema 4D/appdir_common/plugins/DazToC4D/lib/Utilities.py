@@ -11,6 +11,18 @@ from . import Database
 from .DtuLoader import DtuLoader
 from .TextureLib import texture_library
 
+## ***** utility function to check if figure is based on Genesis 9 ****
+## TODO: refactor Utilities.py and consolidate with other Bridge python projects
+def is_genesis9():
+    # print("DEBUG: is_genesis9() called")
+    doc = documents.GetActiveDocument()
+    if doc.SearchObject("l_shoulder"):
+        if doc.SearchObject("l_forearmtwist1"):
+            if doc.SearchObject("l_forearmtwist2"):
+                # print("DEBUG: is_genesis9() returning True")
+                return True
+    # print("DEBUG: is_genesis9() returning False")
+    return False
 
 class Variables:
     """
@@ -52,12 +64,14 @@ class Variables:
         self.import_name = dtu.get_import_name()
         self.dtu = dtu
 
+    # DB 2023-Aug-07: Modified to allow non genesis characters to be joint-corrected and material processed
     def check_if_valid(self):
         """
         Checks if Scene Contains Genesis Skeleton.
         """
         doc = documents.GetActiveDocument()
-        obj = doc.SearchObject("hip")
+        #obj = doc.SearchObject("hip")
+        obj = doc.SearchObject(self.import_name)
         if obj:
             return True
 
@@ -153,11 +167,15 @@ class Variables:
         doc = c4d.documents.GetActiveDocument()
         dtu_dict = json.loads(doc[self.unique_id][1000])
         self.store_dtu(dtu_dict)
-        self.find_skeleton(self.import_name)
-        self.find_skeleton_name()
-        self.find_body(self.import_name)
-        self.find_body_name()
-        self.find_children(self.skeleton)
+        # DB 2024-11-22: data below may not be valid for props and environments
+        try:
+            self.find_skeleton(self.import_name)
+            self.find_skeleton_name()
+            self.find_body(self.import_name)
+            self.find_body_name()
+            self.find_children(self.skeleton)
+        except Exception as e:
+            print("WARNING: Error trying to restore_variables(): " + str(e))
 
 
 def get_daz_mesh():
@@ -637,7 +655,8 @@ class dazToC4Dutils:
             else:
                 slaveObj = slave
                 masterObj = master
-            mg = slaveObj.GetMg()
+            # DB 2024-11-20: GetMg() returning None for V8.1, but unused?
+            # mg = slaveObj.GetMg()
 
             constraintTAG = c4d.BaseTag(1019364)
 
@@ -671,6 +690,13 @@ class dazToC4Dutils:
         twistJoint = doc.SearchObject(dazName + "ForearmTwist_ctrl___R")
         handJoint = doc.SearchObject("rHand")
         aimObj(twistJoint, handJoint, "AIM", 0)
+        # DB 2024-11-20: Fix for G8
+        twistJoint2 = doc.SearchObject(dazName + "ForearmTwist2_ctrl")
+        if twistJoint2:
+            aimObj(twistJoint2, handJoint, "AIM", 0)
+        twistJoint2 = doc.SearchObject(dazName + "ForearmTwist2_ctrl___R")
+        if twistJoint2:
+            aimObj(twistJoint2, handJoint, "AIM", 0)
 
     def fixConstraints(self):
         def fixConstraint(jointName):
@@ -681,8 +707,14 @@ class dazToC4Dutils:
                 tag[c4d.ID_CA_CONSTRAINT_TAG_PSR_MAINTAIN] = True
                 c4d.EventAdd()
 
-        fixConstraint("lForearmTwist")
-        fixConstraint("rForearmTwist")
+        if is_genesis9():
+            fixConstraint("l_forearmtwist1")
+            fixConstraint("l_forearmtwist2")
+            fixConstraint("r_forearmtwist1")
+            fixConstraint("r_forearmtwist2")
+        else:
+            fixConstraint("lForearmTwist")
+            fixConstraint("rForearmTwist")
 
     def hideRig(self):
         doc = documents.GetActiveDocument()
@@ -725,8 +757,10 @@ class dazToC4Dutils:
         doc = documents.GetActiveDocument()
         jointHeadEnd = doc.SearchObject("head_end")
         if jointHeadEnd == None:
-            jointCollar = doc.SearchObject("lCollar")
-
+            if is_genesis9():
+                jointCollar = doc.SearchObject("l_shoulder")
+            else:
+                jointCollar = doc.SearchObject("lCollar")
             jointHead = doc.SearchObject("head")
             newJoint = c4d.BaseObject(c4d.Ojoint)
             newJoint.SetName("head_end")
@@ -881,11 +915,16 @@ class dazToC4Dutils:
         guides = Database.guides_for_rig
         for objs in guides:
             guide_suffix = objs[0]
-            joint = objs[1]
-            if doc.SearchObject(joint):
-                self.moveToObj(meshName + guide_suffix, joint)
-            elif len(objs) == 3:
-                self.moveToObj(meshName + guide_suffix, objs[2])
+            for joint in objs[1:]:
+                if doc.SearchObject(joint):
+                    self.moveToObj(meshName + guide_suffix, joint)
+                    break
+                #print("DEBUG: guidesToDaz() unsupported figure crashfix: " + joint + " not found...")
+            # joint = objs[1]
+            # if doc.SearchObject(joint):
+            #     self.moveToObj(meshName + guide_suffix, joint)
+            # elif len(objs) == 3:
+            #     self.moveToObj(meshName + guide_suffix, objs[2])
 
     def cleanJointsDaz(self, side="Left"):
         doc = documents.GetActiveDocument()
@@ -916,7 +955,10 @@ class dazToC4Dutils:
             prefix = "r"
             suffix = "___R"
 
-        joints = Database.constraint_joints
+        if doc.SearchObject("l_upperarmtwist1"):
+            joints = Database.constraint_joints_g9
+        else:
+            joints = Database.constraint_joints
         for joint in joints:
             dz_joint = joint[0]
             ctrl_joint = joint[1]

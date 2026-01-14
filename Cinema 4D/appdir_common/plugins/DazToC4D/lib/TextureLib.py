@@ -1,4 +1,54 @@
 texture_library = {
+    "emission-color": {
+        "Name": [
+            "Emission Color",
+        ],
+    },
+    "emission-temperature": {
+        "Name": [
+            "Emission Temperature",
+        ],
+    },
+    "luminance": {
+        "Name": [
+            "Luminance",
+        ],
+    },
+    "luminance-units": {
+        "Name": [
+            "Luminance Units",
+        ],
+    },
+    "tile-x": {
+        "Name": [
+            "Horizontal Tiles",
+        ],
+    },
+    "tile-y": {
+        "Name": [
+            "Vertical Tiles",
+        ],
+    },
+    "tile-offset-x": {
+        "Name": [
+            "Horizontal Offset",
+        ],
+    },
+    "tile-offset-y": {
+        "Name": [
+            "Vertical Offset",
+        ],
+    },
+    "makeup-weight":{
+        "Name": [
+            "Makeup Weight",
+        ],
+    },
+    "makeup-base":{
+        "Name": [
+            "Makeup Base Color",
+        ],
+    },
     "normal": {
         "Name": [
             "Normal Map",
@@ -30,6 +80,12 @@ texture_library = {
     "roughness-strength": {
         "Name": [
             "Dual Lobe Specular Ratio",
+        ],
+    },
+
+    "metalness-enable": {
+        "Name": [
+            "Metallicicty Enable",
         ],
     },
     "metalness": {
